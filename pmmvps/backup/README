@@ -1,0 +1,5 @@
+optim.cpp, optim.hpp: one illumination condition
+optim1.cpp, optim1.hpp: multi illuminaion, no multi-scale
+optim2.cpp, optim2.hpp: multi illumination
+optim2.cpp, optim.hpp: 2016.11.21, after CVPR deadline, trying to figure out the m_ncc bug
+propagate.hpp: only spatial propagation, no view propag
