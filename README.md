@@ -3,4 +3,4 @@ PM-MVS
 
 The implementation of the PatchMatch MVS in the scene space.
 
-Traditionally, PM-based method need to traverse all the pixels in each viewpoint several iterations. We instead came up with a way to traverse the 3D point, which significantly improve the speed of the algorithm without losing accuracy.
+Traditionally, PatchMatch based method needs to traverse all the pixels all the viewpoints several iterations. We instead came up with a way to traverse the 3D points, which significantly improves the speed of the algorithm without losing accuracy.
