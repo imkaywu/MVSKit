@@ -24,17 +24,28 @@ void Filter::init() {
 
 void Filter::run() {
     setDepthMapsVGridsVPGridsAddPatchV(0);
+	//string name = m_pmmvps.m_prefix + "ply/before_refine";
+	//m_pmmvps.m_patchManager.writePatches(name, false, true, false);
     
     filterOutside();
     setDepthMapsVGridsVPGridsAddPatchV(1);
+	//name = m_pmmvps.m_prefix + "ply/refined_patches_before_refine_f1";
+	//m_pmmvps.m_patchManager.writePatches(name, true, false, false);
     
     filterExact();
     setDepthMapsVGridsVPGridsAddPatchV(1);
-    
+	//name = m_pmmvps.m_prefix + "ply/refined_patches_before_refine_f2";
+	//m_pmmvps.m_patchManager.writePatches(name, true, false, false);
+
     filterNeighbor(1);
     setDepthMapsVGridsVPGridsAddPatchV(1);
+	//name = m_pmmvps.m_prefix + "ply/refined_patches_before_refine_f3";
+	//m_pmmvps.m_patchManager.writePatches(name, true, false, false);
     
-    // more...
+	filterSmallGroups();
+	setDepthMapsVGridsVPGridsAddPatchV(1);
+	//name = m_pmmvps.m_prefix + "ply/refined_patches_before_refine_f4";
+	//m_pmmvps.m_patchManager.writePatches(name, true, false, false);
 }
 
 void Filter::filterOutside() {
@@ -184,7 +195,8 @@ void Filter::filterExact() {
             m_pmmvps.m_optim.setRefImage(patch);
             m_pmmvps.m_patchManager.setGrids(patch);
         }
-        else {
+        
+		if (static_cast<int>(patch.m_images.size()) < m_pmmvps.m_minImageNumThreshold) {
             m_pmmvps.m_patchManager.removePatch(m_pmmvps.m_patchManager.m_ppatches[p]);
             ++count;
         }
@@ -271,20 +283,20 @@ void Filter::filterNeighbor(const int times) {
     int count = 0;
     for (m_time = 0; m_time < times; ++m_time) {
         filterNeighborSub();
-    }
+
+		vector<Ppatch>::iterator bpatch = m_pmmvps.m_patchManager.m_ppatches.begin();
+		vector<Ppatch>::iterator epatch = m_pmmvps.m_patchManager.m_ppatches.end();
+		vector<int>::iterator breject = m_rejects.begin();
     
-    vector<Ppatch>::iterator bpatch = m_pmmvps.m_patchManager.m_ppatches.begin();
-    vector<Ppatch>::iterator epatch = m_pmmvps.m_patchManager.m_ppatches.end();
-    vector<int>::iterator breject = m_rejects.begin();
-    
-    while (bpatch != epatch) {
-        if (*breject == m_time + 1) {
-            count++;
-            m_pmmvps.m_patchManager.removePatch(*bpatch);
-        }
-        ++bpatch;
-        ++breject;
-    }
+		while (bpatch != epatch) {
+			if (*breject == m_time + 1) {
+				count++;
+				m_pmmvps.m_patchManager.removePatch(*bpatch);
+			}
+			++bpatch;
+			++breject;
+		}
+	}
     
     time(&tv);
     cerr << static_cast<int>(m_pmmvps.m_patchManager.m_ppatches.size()) << "-> "
@@ -417,11 +429,157 @@ void Filter::lls(const vector<vector<float> >& A, const vector<float>& b, vector
     }
 }
 
+void Filter::filterSmallGroups() {
+	time_t tv;
+	time(&tv);
+	time_t curtime = tv;
+	cerr << "FilterGroups:\t" << flush;
+	m_pmmvps.m_patchManager.collectPatches();
+	if (m_pmmvps.m_patchManager.m_ppatches.empty()) {
+		return;
+	}
+
+	const int psize = static_cast<int>(m_pmmvps.m_patchManager.m_ppatches.size());
+	vector<int> label;
+	label.resize(psize);
+	fill(label.begin(), label.end(), -1);
+
+	list<int> untouch;
+	vector<Ppatch>::iterator bpatch = m_pmmvps.m_patchManager.m_ppatches.begin();
+	for (int p = 0; p < psize; ++p) {
+		untouch.push_back(p);
+		(*bpatch)->m_flag = p;
+		++bpatch;
+	}
+
+	int id = -1;
+	while (!untouch.empty()) {
+		const int pid = untouch.front();
+		untouch.pop_front();
+
+		if (label[pid] != -1) {
+			continue;
+		}
+
+		label[pid] = ++id;
+		list<int> ltmp;
+		ltmp.push_back(pid);
+
+		while (!ltmp.empty()) {
+			const int ptmp = ltmp.front();
+			ltmp.pop_front();
+			filterSmallGroupsSub(ptmp, id, label, ltmp);
+		}
+	}
+	++id;
+
+	vector<int> size;
+	size.resize(id);
+	vector<int>::iterator biter = label.begin();
+	vector<int>::iterator eiter = label.end();
+	while (biter != eiter) {
+		++size[*biter];
+		++biter;
+	}
+
+	const int threshold = std::max(20, psize / 10000);
+	cerr << threshold << endl;
+
+	biter = size.begin();
+	eiter = size.end();
+	while (biter != eiter) {
+		if (*biter < threshold) {
+			*biter = 0;
+		}
+		else {
+			*biter = 1;
+		}
+		++biter;
+	}
+
+	int count = 0;
+
+	biter = label.begin();
+	eiter = label.end();
+	bpatch = m_pmmvps.m_patchManager.m_ppatches.begin();
+	while (biter != eiter) {
+		if ((*bpatch)->m_fix) {
+			++biter;
+			++bpatch;
+			continue;
+		}
+
+		if (size[*biter] == 0) {
+			m_pmmvps.m_patchManager.removePatch(*bpatch);
+			++count;
+		}
+		++biter;
+		++bpatch;
+	}
+	time(&tv);
+	cerr << (int)m_pmmvps.m_patchManager.m_ppatches.size() << " -> "
+		<< (int)m_pmmvps.m_patchManager.m_ppatches.size() - count << " ("
+		<< 100 * ((int)m_pmmvps.m_patchManager.m_ppatches.size() - count) / (float)m_pmmvps.m_patchManager.m_ppatches.size()
+		<< "%)\t" << (tv - curtime) / CLOCKS_PER_SEC << " secs" << endl;
+}
+
+void Filter::filterSmallGroupsSub(const int pid, const int id, vector<int>& label, list<int>& ltmp) const {
+	// find neighbors of ptmp and set their ids
+	const Patch& patch = *m_pmmvps.m_patchManager.m_ppatches[pid];
+	const int index = patch.m_images[0];
+	const int ix = patch.m_grids[0](0);
+	const int iy = patch.m_grids[0](1);
+	const int gwidth = m_pmmvps.m_patchManager.m_gwidths[index];
+	const int gheight = m_pmmvps.m_patchManager.m_gheights[index];
+
+	for (int y = -1; y <= 1; ++y) {
+		const int iytmp = iy + y;
+		if (iytmp < 0 || gheight <= iytmp) {
+			continue;
+		}
+		for (int x = -1; x <= 1; ++x) {
+			const int ixtmp = ix + x;
+			if (ixtmp < 0 || gwidth <= ixtmp) {
+				continue;
+			}
+			const int index2 = iytmp * gwidth + ixtmp;
+			vector<Ppatch>::iterator bgrid = m_pmmvps.m_patchManager.m_pgrids[index][index2].begin();
+			vector<Ppatch>::iterator egrid = m_pmmvps.m_patchManager.m_pgrids[index][index2].end();
+			while (bgrid != egrid) {
+				const int itmp = (*bgrid)->m_flag;
+				if (label[itmp] != -1) {
+					++bgrid;
+					continue;
+				}
+
+				if (m_pmmvps.isNeighbor(patch, **bgrid, m_pmmvps.m_neighborThreshold2)) {
+					label[itmp] = id;
+					ltmp.push_back(itmp);
+				}
+				++bgrid;
+			}
+			bgrid = m_pmmvps.m_patchManager.m_vpgrids[index][index2].begin();
+			egrid = m_pmmvps.m_patchManager.m_vpgrids[index][index2].end();
+			while (bgrid != egrid) {
+				const int itmp = (*bgrid)->m_flag;
+				if (label[itmp] != -1) {
+					++bgrid;
+					continue;
+				}
+
+				if (m_pmmvps.isNeighbor(patch, **bgrid, m_pmmvps.m_neighborThreshold2)) {
+					label[itmp] = id;
+					ltmp.push_back(itmp);
+				}
+				++bgrid;
+			}
+		}
+	}
+}
+
 void Filter::setDepthMaps() {
     for (int image = 0; image < m_pmmvps.m_nimages; ++image) {
-        for (int index = 0; index < static_cast<int>(m_pmmvps.m_patchManager.m_dpgrids[image].size()); ++index) {
-            m_pmmvps.m_patchManager.m_dpgrids[image][index] = m_pmmvps.m_patchManager.m_MAXDEPTH;
-        }
+		fill(m_pmmvps.m_patchManager.m_dpgrids[image].begin(), m_pmmvps.m_patchManager.m_dpgrids[image].end(), m_pmmvps.m_patchManager.m_MAXDEPTH);
     }
     setDepthMapsSub();
 }
@@ -438,9 +596,9 @@ void Filter::setDepthMapsSub() {
             Ppatch& ppatch = *bpatch;
             const Vector3f icoord = m_pmmvps.m_photoSet.project(image, ppatch->m_coord, m_pmmvps.m_level);
             
-            const float fx = icoord(0) / m_pmmvps.m_level;
+            const float fx = icoord(0) / m_pmmvps.m_csize;
             const int xs[2] = {(int)floorf(fx), (int)ceilf(fx)};
-            const float fy = icoord(1) / m_pmmvps.m_level;
+            const float fy = icoord(1) / m_pmmvps.m_csize;
             const int ys[2] = {(int)floorf(fy), (int)ceilf(fy)};
             const float depth = m_pmmvps.m_photoSet.m_photos[image].m_oaxis.dot(ppatch->m_coord);
             

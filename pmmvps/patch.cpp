@@ -69,6 +69,7 @@ std::ostream& operator <<(std::ostream& ostr, const Patch& rhs) {
     }
     ostr << endl;
     
+	ostr << static_cast<int>(rhs.m_vimages.size()) << endl;
     for (int i = 0; i < static_cast<int>(rhs.m_vimages.size()); ++i) {
         ostr << rhs.m_vimages[i] << ' ';
     }

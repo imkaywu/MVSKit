@@ -67,7 +67,7 @@ void PatchManager::index2image(Patch& patch) {
         patch.m_images[i] = m_pmmvps.m_photoSet.m_images[patch.m_images[i]];
     }
     
-    for (int i = 0; i < static_cast<int>(patch.m_images.size()); ++i) {
+    for (int i = 0; i < static_cast<int>(patch.m_vimages.size()); ++i) {
         patch.m_vimages[i] = m_pmmvps.m_photoSet.m_images[patch.m_vimages[i]];
     }
 }
@@ -238,15 +238,26 @@ void PatchManager::setGridsImages(Patch& patch, vector<int>& images) const {
     }
 }
 
-void PatchManager::setGrids(Patch &patch) {
+void PatchManager::setGrids(Patch& patch) {
     patch.m_grids.clear();
     for (int i = 0; i < static_cast<int>(patch.m_images.size()); ++i) {
-        const int image = patch.m_images[i]; // !!! should use index instead of image
+        const int image = patch.m_images[i]; // those are index, image2index() called
         Vector3f icoord = m_pmmvps.m_photoSet.project(image, patch.m_coord, m_pmmvps.m_level);
         const int ix = ((int)floorf(icoord(0) + 0.5f)) / m_pmmvps.m_csize;
         const int iy = ((int)floorf(icoord(1) + 0.5f)) / m_pmmvps.m_csize;
         patch.m_grids.push_back(Vector2i(ix, iy));
     }
+}
+
+void PatchManager::setVGrids(Patch& patch) {
+	patch.m_vgrids.clear();
+	for (int i = 0; i < static_cast<int>(patch.m_vimages.size()); i++) {
+		const int image = patch.m_vimages[i];
+		Vector3f icoord = m_pmmvps.m_photoSet.project(image, patch.m_coord, m_pmmvps.m_level);
+		const int ix = ((int)floorf(icoord(0) + 0.5f)) / m_pmmvps.m_csize;
+		const int iy = ((int)floorf(icoord(1) + 0.5f)) / m_pmmvps.m_csize;
+		patch.m_vgrids.push_back(Vector2i(ix, iy));
+	}
 }
 
 void PatchManager::setVImagesVGrids(Ppatch& ppatch) {
@@ -422,7 +433,6 @@ void PatchManager::sortPatches(vector<Ppatch>& ppatches, const int ascend) const
     }
 }
 
-// code below is not checked
 void PatchManager::readPatches() {
 //    for (int i = 0; i < m_pmmvps.m_nimages; ++i) {
 //    const int image = m_pmmvps.m_images[i];
@@ -456,6 +466,37 @@ void PatchManager::readPatches() {
     ifstr.close();
 }
 
+void PatchManager::readPatches(const int iter) {
+	char buffer[1024];
+	sprintf(buffer, "%sply/%08d.patch", m_pmmvps.m_prefix.c_str(), iter);
+	ifstream ifstr;
+	ifstr.open(buffer);
+	if (!ifstr.is_open()) {
+		return;
+	}
+
+	string header;
+	int pnum;
+	ifstr >> header >> pnum;
+	//    cerr << image << " " << pnum << " patches" << endl;
+	for (int p = 0; p < pnum; ++p) {
+		Ppatch ppatch(new Patch());
+		ifstr >> *ppatch;
+		ppatch->m_fix = 0;
+		ppatch->m_tmp = ppatch->score2(m_pmmvps.m_nccThreshold);
+		ppatch->m_vimages.clear();
+		image2index(*ppatch);
+		if (ppatch->m_images.empty()) {
+			return;
+		}
+
+		setGrids(*ppatch);
+		//setVGrids(*ppatch);
+		addPatch(ppatch);
+	}
+	ifstr.close();
+}
+
 void PatchManager::writePatches(const string prefix, bool bExportPLY, bool bExportPatch, bool bExportPSet) {
     collectPatches(1);
     
@@ -468,18 +509,18 @@ void PatchManager::writePatches(const string prefix, bool bExportPLY, bool bExpo
     
     if (bExportPatch)
     {
-//        char buffer[1024];
-//        sprintf(buffer, "%s.patch", prefix.c_str());
-//        ofstream ofstr;
-//        ofstr.open(buffer);
-//        ofstr << "PATCHES" << endl
-//        << (int)m_ppatches.size() << endl;
-//        for (int p = 0; p < (int)m_ppatches.size(); ++p) {
-//            Patch patch = *m_ppatches[p];
-//            index2image(patch);
-//            ofstr << patch << "\n";
-//        }
-//        ofstr.close();
+        char buffer[1024];
+        sprintf(buffer, "%s.patch", prefix.c_str());
+        ofstream ofstr;
+        ofstr.open(buffer);
+        ofstr << "PATCHES" << endl
+			  << static_cast<int>(m_ppatches.size()) << endl;
+        for (int p = 0; p < static_cast<int>(m_ppatches.size()); ++p) {
+            Patch patch = *m_ppatches[p];
+            index2image(patch);
+            ofstr << patch << "\n";
+        }
+        ofstr.close();
     }
     
     if (bExportPSet)
@@ -630,6 +671,7 @@ void PatchManager::writePly(const vector<Ppatch>& patches, const string filename
 // used in the test
 void PatchManager::findNeighbors(const Patch& patch, vector<Ppatch>& neighbors, const float scale, const int margin, const int skipvis) {
     const float radius = 1.5 * margin * m_pmmvps.m_propagate.computeRadius(patch);
+	//cerr << "radius: " << radius << endl;
     
     float unit = 0.0f;
     for (int i = 0; i < static_cast<int>(patch.m_images.size()); ++i) {

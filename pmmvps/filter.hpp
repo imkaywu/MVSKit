@@ -12,8 +12,10 @@
 #include "patch.hpp"
 #include "Eigen/Dense"
 #include <vector>
+#include <list>
 
 using std::vector;
+using std::list;
 using Eigen::Vector2i;
 
 class PmMvps;
@@ -38,9 +40,8 @@ protected:
     void filterNeighbor(const int times);
     void filterNeighborSub();
     
-    // I don't think this is necessary
     void filterSmallGroups();
-    void filterSmallGroupsSub();
+    void filterSmallGroupsSub(const int pid, const int id, vector<int>& label, list<int>& ltmp) const;
     
     void setDepthMaps();
     void setDepthMapsSub();

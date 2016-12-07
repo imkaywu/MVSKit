@@ -55,6 +55,8 @@ public:
     void setGridsImages(Patch& patch, vector<int>& images) const;
     // set Patch (m_grids)
     void setGrids(Patch& patch);
+	// set Patch (m_vgrids);
+	void setVGrids(Patch& patch);
     // set Patch (m_vimages and m_vgrids)
     void setVImagesVGrids(Ppatch& ppatch);
     void setVImagesVGrids(Patch& patch);
@@ -78,6 +80,7 @@ public:
     
     // read patches
     void readPatches();
+	void readPatches(const int iter);
     // write results
     void writePatches(const string prefix, bool bExportPLY, bool bExportPatch, bool bExportPSet);
     void writePly(const vector<Ppatch>& ppatches, const string filename, const vector<Vector3i>& colors);

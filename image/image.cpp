@@ -831,7 +831,7 @@ int Image::readJpeg(const std::string file, vector<unsigned char>& image, int& w
     }
     
     // Use CImg for image loading
-    cimg::imagemagick_path("/opt/local/bin/convert");
+    cimg::imagemagick_path("C:/ImageMagick-7.0.3-Q16/convert.exe");
     CImg<unsigned char> cimage;
     try {
         cimage.load_jpeg(file.c_str());

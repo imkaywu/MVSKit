@@ -225,7 +225,7 @@ void Optim::sortImages(Patch &patch, const int isFixed) const {
     vector<Vector4f, Eigen::aligned_allocator<Vector4f> > rays0, rays1;
     
     computeUnits(patch, indexes0, units0, rays0);
-    
+
     patch.m_images.clear();
     if (indexes0.size() < 2) {
         return;
@@ -537,7 +537,7 @@ int Optim::refinePatch(Patch& patch, const int time, const int ncc) {
         decode(patch.m_coord, patch.m_normal, p);
         patch.m_normal(3) = 0.0f;
         patch.m_ncc = 1.0 - unrobustincc(computeINCC(patch.m_coord, patch.m_normal, patch.m_images, 1));
-        cerr << "ncc after: " << patch.m_ncc << endl;
+        cerr << "ncc: " << patch.m_ncc << endl;
     }
     else {
         return -1;

@@ -386,6 +386,7 @@ void Propagate::findEmptyBlocks(const Ppatch& ppatch, vector<vector<Vector4f, Ei
     
     vector<Ppatch> neighbors;
     m_pmmvps.m_patchManager.findNeighbors(patch, neighbors, 4.0, 1);
+	//cerr << "# of neighbors: " << neighbors.size() << endl;
     
     vector<Ppatch>::iterator bpatch = neighbors.begin();
     vector<Ppatch>::iterator epatch = neighbors.end();
@@ -433,7 +434,7 @@ float Propagate::computeRadius(const Patch &patch) {
     vector<float> units;
     m_pmmvps.m_optim.computeUnits(patch, units);
     vector<float> vftmp = units;
-    nth_element(vftmp.begin(), vftmp.begin() + minnum - 1, vftmp.end());
+    nth_element(vftmp.begin(), vftmp.begin() + minnum - 1, vftmp.end()); // why select the second smallest number as the raidus
     return (*(vftmp.begin() + minnum - 1)) * m_pmmvps.m_csize;
 }
 
@@ -505,7 +506,7 @@ int Propagate::expandSub(const Ppatch& orgppatch, const Vector4f& canCoord) {
     
     m_pmmvps.m_patchManager.addPatch(ppatch);
     
-    if (add == 1) {
+    if (add) {
         m_queue.push(ppatch);
     }    
     
