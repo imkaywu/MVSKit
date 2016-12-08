@@ -314,8 +314,8 @@ void PatchManager::removePatch(const Ppatch& ppatch) {
     
     for (int i = 0; i < static_cast<int>(ppatch->m_vimages.size()); ++i) {
         const int image = ppatch->m_vimages[i];
-        const int& ix = ppatch->m_vgrids[i][0];
-        const int& iy = ppatch->m_vgrids[i][1];
+        const int& ix = ppatch->m_vgrids[i](0);
+        const int& iy = ppatch->m_vgrids[i](1);
         const int index = iy * m_gwidths[image] + ix;
         m_vpgrids[image][index].erase(remove(m_vpgrids[image][index].begin(),
                                              m_vpgrids[image][index].end(),
@@ -400,8 +400,7 @@ void PatchManager::setScales(Patch& patch) const {
 
 void PatchManager::computeNcc(Patch& patch) const {
     m_pmmvps.m_optim.computeWeights(patch);
-    patch.m_ncc = 1.0f - m_pmmvps.m_optim.unrobustincc(m_pmmvps.m_optim.computeINCC(patch.m_coord, patch.m_normal, patch.m_images, 1)); // what's the range of ncc score?
-    //    cerr << "ncc score: " << ppatch->m_ncc << endl;
+    patch.m_ncc = 1.0f - m_pmmvps.m_optim.unrobustincc(m_pmmvps.m_optim.computeINCC(patch.m_coord, patch.m_normal, patch.m_images, 1));
 }
 
 void PatchManager::sortPatches(vector<Ppatch>& ppatches, const int ascend) const {

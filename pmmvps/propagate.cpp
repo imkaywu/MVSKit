@@ -44,8 +44,12 @@ void Propagate::run(const int iter) {
     
     cerr << "Expanding patches..." << flush;
     
-//    propagate(iter);
-    propagateTest(iter);
+	// PM-MVS in image space
+    propagatePmImage(iter);
+	// PM-MVS in scene space
+	//propagatePmScene(iter);
+	// PMVS
+    //propagatePmvs(iter);
     
     cerr << endl
          << "---- EXPANSION: " << (time(NULL) - starttime) << " secs ----" << endl;
@@ -59,43 +63,18 @@ void Propagate::run(const int iter) {
         << 100 * (m_pcount + m_fcount1) / (float)m_ecount << endl;
 }
 
-void Propagate::propagateTest(const int iter) {
-    while (1) {
-        Ppatch ppatch;
-        int isEmpty = 0;
-        if (m_queue.empty()) {
-            isEmpty = 1;
-        }
-        else {
-            ppatch = m_queue.top();
-            m_queue.pop();
-        }
-        
-        if (isEmpty) {
-            break;
-        }
-        
-        vector<vector<Vector4f, Eigen::aligned_allocator<Vector4f> > > canCoords;
-        findEmptyBlocks(ppatch, canCoords);
-        
-        for (int i = 0; i < static_cast<int>(canCoords.size()); ++i) {
-            for (int j = 0; j < static_cast<int>(canCoords[i].size()); ++j) {
-                const int flag = expandSub(ppatch, canCoords[i][j]);
-                if (flag == -1) {
-                    ppatch->m_dflag |= (0x0001) << i;
-                }
-            }
-        }
-    }
-}
+//-------------------------------------------
+// implementation of PM-MVS in image space
+//-------------------------------------------
 
-// for each patch, we propagate twice to the spatial/view neighbours if the cell is not full.
-// if the cell is full, we refine the worst 2 patches
-// in view 1, we propagate p(ref == 1) to the spatial neighbours
-// in view 1, we propagate p(ref == 2) to the view 2
-// in view 1, we propagate p(ref == i) to view i
-void Propagate::propagate(const int iter) {
+// for each patch, we propagate MAX_NUM_OF_PROPAG to the spatial/view neighbours if the cell is not full.
+// if the cell is full, we refine the worst MAX_NUM_OF_PROPAG patches
+void Propagate::propagatePmImage(const int iter) {
     for (int image = 0; image < m_pmmvps.m_nimages; ++image) {
+		cerr << "---------------------" << endl
+			 << "propagate on image " << image << endl
+			 << "---------------------" << endl;
+
         int gwidth = m_pmmvps.m_patchManager.m_gwidths[image];
         int gheight = m_pmmvps.m_patchManager.m_gheights[image];
         int start = 0, end = gwidth * gheight - 1, inc = 1;
@@ -128,40 +107,22 @@ void Propagate::propagate(const int iter) {
                     // propagate up-down
                     propagatePatch(ppatches[n], image, index + inc * gwidth);
                 }
-                // view propagation
-                else {
-                    const float fx = ppatches[n]->m_grids[0](0);
-                    const float fy = ppatches[n]->m_grids[0](1);
-                    const int cx = (int)(floorf(fx + 0.5f)) / m_pmmvps.m_csize;
-                    const int cy = (int)(floorf(fy + 0.5f)) / m_pmmvps.m_csize;
-                    // left-right
-                    propagatePatch(ppatches[n], ppatches[n]->m_images[0], cy * gwidth + cx);
-                    // up-down
-                    propagatePatch(ppatches[n], ppatches[n]->m_images[0], (cy + inc) * gwidth + cx);
-                }
-                /*
-                vector<int> images;
-                vector<int> indexes;
-                // spatial propagation
-                int lr = index + inc;
-                int tb = index + gwidth * inc;
-                image = ppatches[n]->m_images[0];
-                images.push_back(image);    indexes.push_back(lr);
-                images.push_back(image);    indexes.push_back(tb);
-                
-                // propagate patch to neighboring cells
-                cerr << "source: cell index: " << index << ", total patches: " << npatches << ", patch index: " << n + 1 << endl;
-                int isContinue = propagatePatch(ppatches[n], indexes);
-                if (isContinue == -1) {
-                    break;
-                }
-                 */
+                // view propagation, temporarily commented
+                //else {
+                //    const float fx = ppatches[n]->m_grids[0](0);
+                //    const float fy = ppatches[n]->m_grids[0](1);
+                //    const int cx = (int)(floorf(fx + 0.5f)) / m_pmmvps.m_csize;
+                //    const int cy = (int)(floorf(fy + 0.5f)) / m_pmmvps.m_csize;
+                //    // left-right
+                //    propagatePatch(ppatches[n], ppatches[n]->m_images[0], cy * gwidth + cx);
+                //    // up-down
+                //    propagatePatch(ppatches[n], ppatches[n]->m_images[0], (cy + inc) * gwidth + cx);
+                //}
             }
         }
     }
 }
 
-// need to be cautious that the original patch should not be changed
 int Propagate::propagatePatch(const Ppatch& ppatch, const int image, const int index) {
     vector<Ppatch>& ppatches = m_pmmvps.m_patchManager.m_pgrids[image][index];
     m_pmmvps.m_patchManager.sortPatches(ppatches, 0); // descending order
@@ -198,30 +159,39 @@ int Propagate::propagatePatch(const Ppatch& ppatch, const int image, const int i
             newicoord << distribution(generator) * m_pmmvps.m_csize, distribution(generator) * m_pmmvps.m_csize, 0.0f;
             newicoord = icoord + newicoord;
             newppatch = generatePatch(ppatch, newicoord);
+			if (!newppatch) { // newppatch == NULL
+				continue;
+			}
         }
         else {
             m_pmmvps.m_patchManager.sortPatches(ppatches, 0); // descending order;
             Vector3f icoord = m_pmmvps.m_photoSet.project(image, ppatches[MAX_NUM_OF_PATCHES - 1]->m_coord, m_pmmvps.m_level);
             newppatch = generatePatch(ppatch, icoord);
-            if (newppatch->m_ncc < ppatches[MAX_NUM_OF_PATCHES - 1]->m_ncc) {
-                continue;
-            }
+			if (!newppatch || newppatch->m_ncc < ppatches[MAX_NUM_OF_PATCHES - 1]->m_ncc) { // newppatch != NULL
+				continue;
+			}
         }
+
+		//const int flag = checkCounts(*newppatch);
+		//if (flag) {
+		//	return -1;
+		//}
+		//++m_ecount;
         
         //----------patch optimization
         if (m_pmmvps.m_optim.preProcess(*newppatch) == -1) {
             ++m_fcount0;
-            cerr << "failed before optimization" << endl;
+            //cerr << "failed before optimization" << endl;
             continue;
         }
         
-        cerr << "before refinement: " << newppatch->m_coord << endl << newppatch->m_normal << endl;
+        //cerr << "before refinement: " << newppatch->m_coord << endl << newppatch->m_normal << endl;
         m_pmmvps.m_optim.refinePatch(*newppatch, 100);
-        cerr << "after refinement: " << newppatch->m_coord << endl << newppatch->m_normal << endl;
+        //cerr << "after refinement: " << newppatch->m_coord << endl << newppatch->m_normal << endl;
         
         if (m_pmmvps.m_optim.postProcess(*newppatch) == -1) {
             ++m_fcount1;
-            cerr << "failed after optimization" << endl;
+            //cerr << "failed after optimization" << endl;
             continue;
         }
         
@@ -229,8 +199,17 @@ int Propagate::propagatePatch(const Ppatch& ppatch, const int image, const int i
             m_pmmvps.m_patchManager.removePatch(ppatches[MAX_NUM_OF_PATCHES - 1]);
             ++rcount;
         }
-        m_pmmvps.m_patchManager.addPatch(newppatch);
-        ++pcount;
+		else {
+			++pcount;
+		}
+
+		//const int add = updateCounts(*newppatch);
+
+		m_pmmvps.m_patchManager.addPatch(newppatch);
+
+		//if (add) {
+		//	m_queue.push(ppatch);
+		//}
     }
     cerr << "# propag: " << pcount << endl;
     cerr << "# refine: " << rcount << endl;
@@ -239,23 +218,54 @@ int Propagate::propagatePatch(const Ppatch& ppatch, const int image, const int i
 }
 
 Ppatch Propagate::generatePatch(const Ppatch& ppatch, const Vector3f& icoord) const {
-    // reference image, the image that the patch is propagate to
-    const int image = ppatch->m_images[0];
-    Patch newpatch(*ppatch);
+    Patch newpatch;
     // update the coord of the new patch
+	const int image = ppatch->m_images[0];
     const float depth = m_pmmvps.m_photoSet.m_photos[image].m_oaxis.dot(ppatch->m_coord);
     Vector3f newicoord = depth * icoord;
     newpatch.m_coord = m_pmmvps.m_photoSet.m_photos[image].unproject(newicoord, m_pmmvps.m_level);
-    // set grids, the grid of the reference SHOULD be fixed since only the depth is updated
-    m_pmmvps.m_patchManager.setGrids(newpatch);
-    // recompute the ncc score
+	// update the normal of the new patch
+	newpatch.m_normal = ppatch->m_normal;
+    // set grids and images [???the grid of the reference SHOULD be fixed since only the depth is updated]
+    m_pmmvps.m_patchManager.setGridsImages(newpatch, ppatch->m_images);
+	if (newpatch.m_images.empty()) {
+		return NULL;
+	}
+    // compute the ncc score
     m_pmmvps.m_patchManager.computeNcc(newpatch);
     return Ppatch(new Patch(newpatch));
 }
 
+//-------------------------------------------
+// implementation of PM-MVS in scene space
+//-------------------------------------------
+
+void Propagate::propagatePmScene(const int iter) {
+	while (1) {
+		Ppatch ppatch;
+		int isEmpty = 0;
+		if (m_queue.empty()) {
+			isEmpty = 1;
+		}
+		else {
+			ppatch = m_queue.top();
+			m_queue.pop();
+		}
+
+		if (isEmpty) {
+			break;
+		}
+
+		// 
+	}
+}
+
+//-------------------------------------------
+// implementation of PM-MVS (old code)
+//-------------------------------------------
+
 // need to be cautious that the original patch should not be changed
 // use the view we're propagating to as the reference view
-// old propagation code
 int Propagate::propagatePatch(Ppatch& ppatch, vector<int>& indexes) {
     int refImage = ppatch->m_images[0];
     int ncells = static_cast<int>(indexes.size()); // number of neighboring cells to propagate to
@@ -368,7 +378,39 @@ void Propagate::findViewNeighbors(Ppatch& ppatch, vector<int>& images, vector<in
     }
 }
 
-// for testing
+//-------------------------------------------
+// implementation of PMVS
+//-------------------------------------------
+void Propagate::propagatePmvs(const int iter) {
+	while (1) {
+		Ppatch ppatch;
+		int isEmpty = 0;
+		if (m_queue.empty()) {
+			isEmpty = 1;
+		}
+		else {
+			ppatch = m_queue.top();
+			m_queue.pop();
+		}
+
+		if (isEmpty) {
+			break;
+		}
+
+		vector<vector<Vector4f, Eigen::aligned_allocator<Vector4f> > > canCoords;
+		findEmptyBlocks(ppatch, canCoords);
+
+		for (int i = 0; i < static_cast<int>(canCoords.size()); ++i) {
+			for (int j = 0; j < static_cast<int>(canCoords[i].size()); ++j) {
+				const int flag = expandSub(ppatch, canCoords[i][j]);
+				if (flag == -1) {
+					ppatch->m_dflag |= (0x0001) << i;
+				}
+			}
+		}
+	}
+}
+
 void Propagate::findEmptyBlocks(const Ppatch& ppatch, vector<vector<Vector4f, Eigen::aligned_allocator<Vector4f> > >& canCoords){
     const int dnum = 6; // dnum must be at most 8, because m_dflag is char???
     const Patch& patch = *ppatch;

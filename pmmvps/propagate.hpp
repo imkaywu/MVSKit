@@ -28,8 +28,9 @@ public:
     
     void init();
     void run(const int iter);
-    void propagate(const int iter); // PatchMatch
-    void propagateTest(const int iter); // PMVS
+    void propagatePmImage(const int iter); // PatchMatch in the image space
+	void propagatePmScene(const int iter);
+    void propagatePmvs(const int iter); // PMVS
     void findViewNeighbors(Ppatch& ppatch, vector<int>& images, vector<int>& indexes);
     int propagatePatch(Ppatch& ppatch, vector<int>& indexes);
     int propagatePatch(const Ppatch& ppatch, const int image, const int index);
